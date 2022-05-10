@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from dice_coeff import SoftDiceLoss, dice_coeff
 import os
 from se3dunet import se3dUnet
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0，1'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 batch_size = 16
 num_epoch = 100
 

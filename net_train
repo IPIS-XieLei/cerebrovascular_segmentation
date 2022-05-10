@@ -1,0 +1,82 @@
+import torch
+from torch import optim
+from dataset import VesselDataSet
+from torchvision.transforms import transforms
+from torch.utils.data import DataLoader
+from dice_coeff import SoftDiceLoss, dice_coeff
+import os
+from se3dunet import se3dUnet
+# os.environ['CUDA_VISIBLE_DEVICES'] = '0，1'
+batch_size = 16
+num_epoch = 100
+
+def train():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    ##########################################################################
+    model = se3dUnet(1,2).to(device)
+    # model.load_state_dict(torch.load("/media/yjl/Gan_vessels/weights_all/3dUnet_weights_2_13.pth", map_location='cuda'))
+    model = torch.nn.DataParallel(model)
+    # model.load_state_dict(torch.load("/media/yjl/Gan_vessels/CBAMUNet/CBAMunet_weights_1.pth", map_location='cuda'))
+    # model = segnet().to(device)
+    # model = FCN16().to(device)
+
+    ##########################################################################
+    ####################################################################
+
+    # model.load_state_dict(
+    #     torch.load(r'D:\Vessel_new\savefile\2dseunet\se2dunet_weights_8.pth', map_location='cpu'))
+    ######################################################################
+    criterion = SoftDiceLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)#lr可以试试取0.01到0.001
+    x_transforms = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,))])
+    y_transforms = transforms.ToTensor()
+    # ##########################################################################
+    # dataset = VesselDataSet(r"D:\DATA\wenyi_MRA\train_2d_96_48_56\data",
+    #                         r"D:\DATA\wenyi_MRA\train_2d_96_48_56\seg", transform=x_transforms,
+    #                         target_transform=y_transforms)
+    # ##########################################################################
+    ##########################################################################
+    dataset = VesselDataSet(r"D:\Vessel_new\Set\WY\MRA\train\datapatch3d",
+                            r"D:\Vessel_new\Set\WY\MRA\train\segpatch3d", transform=x_transforms,
+                            target_transform=y_transforms)
+    ##########################################################################
+
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=12)
+    for epoch in range(num_epoch):
+        print('Epoch {0}/{1}'.format(epoch, num_epoch - 1))
+        print('-------------------------------------------')
+        dt_size = len(dataloader.dataset)
+        epoch_loss = 0
+        step = 0
+        for x, y,_ in dataloader:
+            step += 1
+            #type是否有必要改成DoubleTensor
+            inputs = x.type(torch.FloatTensor).to(device)
+            labels = y.type(torch.FloatTensor).to(device).squeeze()
+            # labels = y.type(torch.FloatTensor).to(device)
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            out=torch.FloatTensor()
+            if len(outputs.shape) == 4:
+                out = outputs[:, 1, :, :].squeeze()
+            if len(outputs.shape)==5:
+                out = outputs[:, 1, :, :, :].squeeze()
+            print("dice: %0.3f " % dice_coeff(out, labels))
+            loss = criterion(out, labels)  # 可能要改
+            loss.backward()
+            optimizer.step()
+            epoch_loss += float(loss.item())
+            print("%d/%d,train_loss:%0.3f" % (step, dt_size // dataloader.batch_size, loss.item()))
+        print("epoch %d loss:%0.3f" % (epoch, epoch_loss))
+        with open(r"D:\Vessel_new\savefile\3dseunet\se3dunet_epoch_loss.txt", 'a+') as f:
+            f.writelines('epoch{0}:{1} \n'.format(str(epoch),str(epoch_loss)))
+        ########################################################################################################
+        torch.save(model.state_dict(), r'D:\Vessel_new\savefile\3dseunet\se3dunet_weights_%d.pth' % epoch)
+        #######################################################################################################
+
+if __name__=='__main__':
+    train()
+    
